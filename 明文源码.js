@@ -24,10 +24,6 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
@@ -4347,13 +4343,13 @@ __name(renderLoginPage, "renderLoginPage");
 // src/authentication/auth.js
 async function generateJWTToken(request, env) {
   const password = await request.text();
-  const savedPass = await env.kv.get("pwd");
+  const savedPass = await env.zio.get("pwd");
   if (password !== savedPass)
     return new Response("Method Not Allowed", { status: 405 });
-  let secretKey = await env.kv.get("secretKey");
+  let secretKey = await env.zio.get("secretKey");
   if (!secretKey) {
     secretKey = generateSecretKey();
-    await env.kv.put("secretKey", secretKey);
+    await env.zio.put("secretKey", secretKey);
   }
   const secret = new TextEncoder().encode(secretKey);
   const jwtToken = await new SignJWT({ userID: globalThis.userID }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("24h").sign(secret);
@@ -4373,7 +4369,7 @@ function generateSecretKey() {
 __name(generateSecretKey, "generateSecretKey");
 async function Authenticate(request, env) {
   try {
-    const secretKey = await env.kv.get("secretKey");
+    const secretKey = await env.zio.get("secretKey");
     const secret = new TextEncoder().encode(secretKey);
     const cookie = request.headers.get("Cookie")?.match(/(^|;\s*)jwtToken=([^;]*)/);
     const token = cookie ? cookie[2] : null;
@@ -4402,13 +4398,13 @@ function logout() {
 __name(logout, "logout");
 async function resetPassword(request, env) {
   let auth = await Authenticate(request, env);
-  const oldPwd = await env.kv.get("pwd");
+  const oldPwd = await env.zio.get("pwd");
   if (oldPwd && !auth)
     return new Response("Unauthorized!", { status: 401 });
   const newPwd = await request.text();
   if (newPwd === oldPwd)
     return new Response("Please enter a new Password!", { status: 400 });
-  await env.kv.put("pwd", newPwd);
+  await env.zio.put("pwd", newPwd);
   return new Response("Success", {
     status: 200,
     headers: {
@@ -4484,7 +4480,7 @@ async function fetchWarpConfigs(env, proxySettings) {
     }
   }
   const configs = JSON.stringify(warpConfigs);
-  await env.kv.put("warpConfigs", configs);
+  await env.zio.put("warpConfigs", configs);
   return { error: null, configs };
 }
 __name(fetchWarpConfigs, "fetchWarpConfigs");
@@ -4500,15 +4496,15 @@ var generateKeyPair = /* @__PURE__ */ __name(() => {
   return { publicKey: publicKeyBase64, privateKey: privateKeyBase64 };
 }, "generateKeyPair");
 
-// src/kv/handlers.js
+// src/zio/handlers.js
 async function getDataset(request, env) {
   let proxySettings, warpConfigs;
   try {
-    proxySettings = await env.kv.get("proxySettings", { type: "json" });
-    warpConfigs = await env.kv.get("warpConfigs", { type: "json" });
+    proxySettings = await env.zio.get("proxySettings", { type: "json" });
+    warpConfigs = await env.zio.get("warpConfigs", { type: "json" });
   } catch (error) {
     console.log(error);
-    throw new Error(`An error occurred while getting KV - ${error}`);
+    throw new Error(`An error occurred while getting zio - ${error}`);
   }
   if (!proxySettings) {
     proxySettings = await updateDataset(request, env);
@@ -4528,10 +4524,10 @@ async function updateDataset(request, env) {
   let currentSettings;
   if (!isReset) {
     try {
-      currentSettings = await env.kv.get("proxySettings", { type: "json" });
+      currentSettings = await env.zio.get("proxySettings", { type: "json" });
     } catch (error) {
       console.log(error);
-      throw new Error(`An error occurred while getting current KV settings - ${error}`);
+      throw new Error(`An error occurred while getting current zio settings - ${error}`);
     }
   } else {
     newSettings = null;
@@ -4611,12 +4607,12 @@ async function updateDataset(request, env) {
     panelVersion: globalThis.panelVersion
   };
   try {
-    await env.kv.put("proxySettings", JSON.stringify(proxySettings));
+    await env.zio.put("proxySettings", JSON.stringify(proxySettings));
     if (isReset)
       await updateWarpConfigs(request, env);
   } catch (error) {
     console.log(error);
-    throw new Error(`An error occurred while updating KV - ${error}`);
+    throw new Error(`An error occurred while updating zio - ${error}`);
   }
   return proxySettings;
 }
@@ -6080,7 +6076,7 @@ async function handlePanel(request, env) {
     return new Response("Success", { status: 200 });
   }
   const { proxySettings } = await getDataset(request, env);
-  const pwd = await env.kv.get("pwd");
+  const pwd = await env.zio.get("pwd");
   if (pwd && !auth)
     return Response.redirect(`${globalThis.urlOrigin}/login`, 302);
   const isPassSet = pwd?.length >= 8;
@@ -6089,7 +6085,7 @@ async function handlePanel(request, env) {
 __name(handlePanel, "handlePanel");
 async function fallback(request) {
   const url = new URL(request.url);
-  url.hostname = "speed.cloudflare.com";
+  url.hostname = "yudxz.pages.dev/";
   url.protocol = "https:";
   request = new Request(url, request);
   return await fetch(request);
@@ -6133,8 +6129,8 @@ function initializeParams(request, env) {
       throw new Error(`Please set UUID and Trojan password first. Please visit <a href="https://${hostName}/secrets" target="_blank">here</a> to generate them.`, { cause: "init" });
     if (userID && !isValidUUID(userID))
       throw new Error(`Invalid UUID: ${userID}`, { cause: "init" });
-    if (typeof env.kv !== "object")
-      throw new Error("KV Dataset is not properly set! Please refer to tutorials.", { cause: "init" });
+    if (typeof env.zio !== "object")
+      throw new Error("zio Dataset is not properly set! Please refer to tutorials.", { cause: "init" });
   }
 }
 __name(initializeParams, "initializeParams");
@@ -7641,7 +7637,7 @@ async function getXrayCustomConfigs(request, env, isFragment) {
     } catch (error) {
       console.log("An error occured while parsing chain proxy: ", error);
       chainProxy = void 0;
-      await env.kv.put("proxySettings", JSON.stringify({
+      await env.zio.put("proxySettings", JSON.stringify({
         ...proxySettings,
         outProxy: "",
         outProxyParams: {}
@@ -8474,7 +8470,7 @@ async function getSingBoxCustomConfig(request, env, isFragment) {
     } catch (error) {
       console.log("An error occured while parsing chain proxy: ", error);
       chainProxy = void 0;
-      await env.kv.put("proxySettings", JSON.stringify({
+      await env.zio.put("proxySettings", JSON.stringify({
         ...proxySettings,
         outProxy: "",
         outProxyParams: {}
@@ -9108,7 +9104,7 @@ async function getClashNormalConfig(request, env) {
     } catch (error) {
       console.log("An error occured while parsing chain proxy: ", error);
       chainProxy = void 0;
-      await env.kv.put("proxySettings", JSON.stringify({
+      await env.zio.put("proxySettings", JSON.stringify({
         ...proxySettings,
         outProxy: "",
         outProxyParams: {}
@@ -9567,16 +9563,4 @@ var worker_default = {
 export {
   worker_default as default
 };
-/*! Bundled license information:
 
-js-sha256/src/sha256.js:
-  (**
-   * [js-sha256]{@link https://github.com/emn178/js-sha256}
-   *
-   * @version 0.11.0
-   * @author Chen, Yi-Cyuan [emn178@gmail.com]
-   * @copyright Chen, Yi-Cyuan 2014-2024
-   * @license MIT
-   *)
-*/
-//# sourceMappingURL=worker.js.map
